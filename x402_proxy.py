@@ -1,8 +1,10 @@
 import os
 from fastapi import APIRouter, HTTPException
 from x402.clients.httpx import x402HttpxClient
+from x402.clients.base import PaymentError
 from eth_account import Account
 from dotenv import load_dotenv
+from types import SimpleNamespace
 
 # 加载环境变量
 load_dotenv()
@@ -146,11 +148,10 @@ async def get_item1():
         try:
             print(f"Creating x402HttpxClient with account: {account.address}")
             print(f"Base URL: https://pay.zen7.com/crypto")
-            
-            # 配置 x402 客户端，使用基本配置
+
+            # 使用 minimal 配置（不传 max_value 与 selector）
             async with x402HttpxClient(
                 account=account
-                # 暂时不设置 max_value，让 x402 自动处理
             ) as client:
                 print(f"Making request to: https://pay.zen7.com/crypto/item1")
                 
@@ -183,6 +184,10 @@ async def get_item1():
                         "x_payment_response": headers.get("x-payment-response")
                     }
                     
+                except PaymentError as request_error:
+                    # 支付失败时，附带原始 402 响应体，便于诊断
+                    detail = {"message": f"Payment failed: {request_error}", "account": account.address}
+                    raise HTTPException(status_code=500, detail=detail)
                 except Exception as request_error:
                     print(f"Request error: {str(request_error)}")
                     print(f"Error type: {type(request_error)}")
