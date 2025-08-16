@@ -1,13 +1,25 @@
 import os
+import asyncio
 from fastapi import APIRouter, HTTPException
 from x402.clients.httpx import x402HttpxClient
 from x402.clients.base import PaymentError
 from eth_account import Account
 from dotenv import load_dotenv
 from types import SimpleNamespace
+from pydantic import BaseModel
 
 # 加载环境变量
 load_dotenv()
+
+# 数据模型
+class ExecutePermitRequest(BaseModel):
+    owner: str
+    spender: str
+    value: str
+    deadline: int
+    v: int
+    r: str
+    s: str
 
 router = APIRouter(prefix="/x402", tags=["x402"])
 
@@ -204,3 +216,50 @@ async def get_item1():
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"x402 request failed: {str(e)}")
+
+@router.post("/execute-permit")
+async def execute_permit(permit_request: ExecutePermitRequest):
+    """执行 EIP-2612 permit 授权，建立 USDC 授权关系"""
+    try:
+        print(f"🔄 执行 permit 授权...")
+        print(f"Owner: {permit_request.owner}")
+        print(f"Spender: {permit_request.spender}")
+        print(f"Value: {permit_request.value}")
+        print(f"Deadline: {permit_request.deadline}")
+        print(f"Signature: v={permit_request.v}, r={permit_request.r}, s={permit_request.s}")
+        
+        # 获取 transfer handler
+        from transfer_handler import get_transfer_handler
+        handler = get_transfer_handler()
+        if not handler:
+            raise HTTPException(status_code=500, detail="Transfer handler not available")
+        
+        # 调用真实的 permit 执行方法
+        result = await handler.execute_permit(
+            owner=permit_request.owner,
+            spender=permit_request.spender,
+            value=permit_request.value,
+            deadline=permit_request.deadline,
+            v=permit_request.v,
+            r=permit_request.r,
+            s=permit_request.s
+        )
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "txHash": result.get("tx_hash"),
+                "message": result.get("message", "Permit executed successfully"),
+                "details": result.get("details", {})
+            }
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=result.get("error", "Permit execution failed")
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Permit 执行失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Permit execution failed: {str(e)}")
