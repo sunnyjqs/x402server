@@ -77,8 +77,125 @@ BASE_USDC_CONFIG = {
     ]
 }
 
+# Base Sepolia 测试网 USDC 配置
+SEPOLIA_USDC_CONFIG = {
+    "chain_id": 84532,  # Base Sepolia testnet
+    "rpc_url": "https://sepolia.base.org",
+    "usdc_address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",  # Base Sepolia USDC
+    "usdc_abi": [
+        # 基本 ERC20 函数
+        {
+            "constant": True,
+            "inputs": [],
+            "name": "name",
+            "outputs": [{"name": "", "type": "string"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "constant": True,
+            "inputs": [],
+            "name": "symbol",
+            "outputs": [{"name": "", "type": "string"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "constant": True,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "constant": True,
+            "inputs": [{"name": "_owner", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"name": "balance", "type": "uint256"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "constant": True,
+            "inputs": [
+                {"name": "_owner", "type": "address"},
+                {"name": "_spender", "type": "address"}
+            ],
+            "name": "allowance",
+            "outputs": [{"name": "", "type": "uint256"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "constant": False,
+            "inputs": [
+                {"name": "_spender", "type": "address"},
+                {"name": "_value", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "constant": False,
+            "inputs": [
+                {"name": "_to", "type": "address"},
+                {"name": "_value", "type": "uint256"}
+            ],
+            "name": "transfer",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "constant": False,
+            "inputs": [
+                {"name": "_from", "type": "address"},
+                {"name": "_to", "type": "address"},
+                {"name": "_value", "type": "uint256"}
+            ],
+            "name": "transferFrom",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        # EIP-2612 Permit 函数
+        {
+            "constant": False,
+            "inputs": [
+                {"name": "owner", "type": "address"},
+                {"name": "spender", "type": "address"},
+                {"name": "value", "type": "uint256"},
+                {"name": "deadline", "type": "uint256"},
+                {"name": "v", "type": "uint8"},
+                {"name": "r", "type": "bytes32"},
+                {"name": "s", "type": "bytes32"}
+            ],
+            "name": "permit",
+            "outputs": [],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }
+    ]
+}
+
+def create_sepolia_handler():
+    """创建 Sepolia 测试网的 TransferHandler 实例"""
+    return TransferHandler(use_sepolia=True)
+
 class TransferHandler:
-    def __init__(self):
+    def __init__(self, use_sepolia=False):
         self.private_key = os.getenv("EXISTING_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
         if not self.private_key:
             raise ValueError("EXISTING_PRIVATE_KEY not configured")
@@ -87,16 +204,25 @@ class TransferHandler:
             self.private_key = f"0x{self.private_key}"
         
         self.account = Account.from_key(self.private_key)
-        self.w3 = Web3(Web3.HTTPProvider(BASE_USDC_CONFIG["rpc_url"]))
+        
+        # 根据参数选择网络配置
+        if use_sepolia:
+            self.config = SEPOLIA_USDC_CONFIG
+            print(f"🔗 连接到 Base Sepolia 测试网: {self.config['rpc_url']}")
+        else:
+            self.config = BASE_USDC_CONFIG
+            print(f"🔗 连接到 Base 主网: {self.config['rpc_url']}")
+        
+        self.w3 = Web3(Web3.HTTPProvider(self.config["rpc_url"]))
         
         # 检查网络连接
         if not self.w3.is_connected():
-            raise ConnectionError("Failed to connect to Base network")
+            raise ConnectionError(f"Failed to connect to {self.config['rpc_url']}")
         
         # 创建 USDC 合约实例
         self.usdc_contract = self.w3.eth.contract(
-            address=BASE_USDC_CONFIG["usdc_address"],
-            abi=BASE_USDC_CONFIG["usdc_abi"]
+            address=self.config["usdc_address"],
+            abi=self.config["usdc_abi"]
         )
     
     async def execute_transfer_from(
@@ -216,6 +342,16 @@ class TransferHandler:
                 "message": "Failed to check allowance"
             }
 
+    async def get_eth_balance(self, address: str) -> float:
+        """获取指定地址的 ETH 余额"""
+        try:
+            balance_wei = self.w3.eth.get_balance(address)
+            balance_eth = self.w3.from_wei(balance_wei, 'ether')
+            return float(balance_eth)
+        except Exception as e:
+            print(f"❌ 获取 ETH 余额失败: {e}")
+            return 0.0
+
     async def execute_permit(
         self, 
         owner: str, 
@@ -224,7 +360,8 @@ class TransferHandler:
         deadline: int, 
         v: int, 
         r: str, 
-        s: str
+        s: str,
+        network: str = "mainnet"  # 新增：网络参数
     ) -> Dict[str, Any]:
         """
         执行 EIP-2612 permit 授权
@@ -245,6 +382,10 @@ class TransferHandler:
             print(f"Spender: {spender}")
             print(f"Value: {value}")
             print(f"Deadline: {deadline}")
+            
+            # 检查 spender 地址的 ETH 余额
+            spender_eth_balance = await self.get_eth_balance(spender)
+            print(f"💰 Spender ETH 余额: {spender_eth_balance} ETH")
             
             # 转换地址格式为 checksum 地址
             owner_checksum = Web3.to_checksum_address(owner)

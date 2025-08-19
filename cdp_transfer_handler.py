@@ -210,6 +210,31 @@ class CdpTransferHandler:
                 "message": "Web3 fallback failed"
             }
 
+    async def get_eth_balance(self, address: str) -> float:
+        """获取指定地址的 ETH 余额"""
+        try:
+            # 尝试使用 CDP 获取余额
+            balance = await self.cdp.evm.get_balance(address=address)
+            if balance and 'balance' in balance:
+                balance_wei = int(balance['balance'])
+                balance_eth = balance_wei / 1e18
+                return float(balance_eth)
+            else:
+                # 回退到 Web3 实现
+                from transfer_handler import TransferHandler
+                web3_handler = TransferHandler()
+                return await web3_handler.get_eth_balance(address)
+        except Exception as e:
+            print(f"❌ CDP 获取 ETH 余额失败: {e}")
+            # 回退到 Web3 实现
+            try:
+                from transfer_handler import TransferHandler
+                web3_handler = TransferHandler()
+                return await web3_handler.get_eth_balance(address)
+            except Exception as web3_error:
+                print(f"❌ Web3 获取 ETH 余额也失败: {web3_error}")
+                return 0.0
+
     async def execute_permit(
         self, 
         owner: str, 
@@ -218,7 +243,8 @@ class CdpTransferHandler:
         deadline: int, 
         v: int, 
         r: str, 
-        s: str
+        s: str,
+        network: str = "mainnet"  # 新增：网络参数
     ) -> Dict[str, Any]:
         """
         执行 EIP-2612 permit 授权
@@ -239,6 +265,10 @@ class CdpTransferHandler:
             print(f"Spender: {spender}")
             print(f"Value: {value}")
             print(f"Deadline: {deadline}")
+            
+            # 检查 spender 地址的 ETH 余额
+            spender_eth_balance = await self.get_eth_balance(spender)
+            print(f"💰 Spender ETH 余额: {spender_eth_balance} ETH")
             
             # 方法 1：尝试使用 CDP 的 permit API
             try:
@@ -273,7 +303,7 @@ class CdpTransferHandler:
                 
                 # 方法 2：回退到 Web3 实现
                 return await self._fallback_permit_execution(
-                    owner, spender, value, deadline, v, r, s
+                    owner, spender, value, deadline, v, r, s, network
                 )
                 
         except Exception as e:
@@ -292,16 +322,17 @@ class CdpTransferHandler:
         deadline: int, 
         v: int, 
         r: str, 
-        s: str
+        s: str,
+        network: str = "mainnet"  # 新增：网络参数
     ) -> Dict[str, Any]:
-        """回退到 Web3 的 permit 执行"""
+        """回退到 Web3 执行"""
         try:
             from transfer_handler import get_transfer_handler
             
             handler = get_transfer_handler()
             if handler and hasattr(handler, 'execute_permit'):
                 return await handler.execute_permit(
-                    owner, spender, value, deadline, v, r, s
+                    owner, spender, value, deadline, v, r, s, network
                 )
             else:
                 return {

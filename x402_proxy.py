@@ -20,6 +20,12 @@ class ExecutePermitRequest(BaseModel):
     v: int
     r: str
     s: str
+    network: str = "sepolia"  # 新增：网络选择，默认 sepolia
+
+class TransferFromRequest(BaseModel):
+    owner: str  # 被扣款的地址（MetaMask 所在地址）
+    amount: str = "10000"  # 6 位小数（默认 0.01 USDC）
+    network: str = "sepolia"
 
 router = APIRouter(prefix="/x402", tags=["x402"])
 
@@ -229,10 +235,26 @@ async def execute_permit(permit_request: ExecutePermitRequest):
         print(f"Signature: v={permit_request.v}, r={permit_request.r}, s={permit_request.s}")
         
         # 获取 transfer handler
-        from transfer_handler import get_transfer_handler
-        handler = get_transfer_handler()
+        from transfer_handler import get_transfer_handler, create_sepolia_handler
+        handler = None
+        
+        # 根据网络信息创建对应的 handler
+        if permit_request.network == "sepolia":
+            handler = create_sepolia_handler()
+        else:
+            handler = get_transfer_handler()
+            
         if not handler:
             raise HTTPException(status_code=500, detail="Transfer handler not available")
+        
+        # 检查 spender 地址的 ETH 余额
+        try:
+            eth_balance = await handler.get_eth_balance(permit_request.spender)
+            print(f"💰 Spender ETH 余额 (网络: {permit_request.network}): {eth_balance} ETH")
+            if eth_balance < 0.0001:
+                print(f"⚠️  警告: Spender ETH 余额过低 ({eth_balance} ETH), 可能无法支付 gas 费用")
+        except Exception as e:
+            print(f"⚠️  无法获取 ETH 余额: {e}")
         
         # 调用真实的 permit 执行方法
         result = await handler.execute_permit(
@@ -242,7 +264,8 @@ async def execute_permit(permit_request: ExecutePermitRequest):
             deadline=permit_request.deadline,
             v=permit_request.v,
             r=permit_request.r,
-            s=permit_request.s
+            s=permit_request.s,
+            network=permit_request.network  # 传递网络信息
         )
         
         if result.get("success"):
@@ -263,3 +286,38 @@ async def execute_permit(permit_request: ExecutePermitRequest):
     except Exception as e:
         print(f"❌ Permit 执行失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Permit execution failed: {str(e)}")
+
+@router.post("/transfer-from")
+async def transfer_from(req: TransferFromRequest):
+    """使用已建立的 allowance，从 owner 转 USDC 到后端钱包地址（spender 自己）。"""
+    try:
+        print("🔄 执行 transferFrom...")
+        print(f"Owner: {req.owner}")
+        print(f"Amount: {req.amount}")
+        print(f"Network: {req.network}")
+
+        from transfer_handler import get_transfer_handler, create_sepolia_handler
+        if req.network == "sepolia":
+            handler = create_sepolia_handler()
+        else:
+            handler = get_transfer_handler()
+
+        if not handler:
+            raise HTTPException(status_code=500, detail="Transfer handler not available")
+
+        result = await handler.execute_transfer_from(req.owner, req.amount)
+        if result.get("success"):
+            return {
+                "success": True,
+                "txHash": result.get("tx_hash"),
+                "message": result.get("message", "transferFrom executed"),
+                "final_balance": result.get("final_balance"),
+                "final_balance_usdc": result.get("final_balance_usdc"),
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "transferFrom failed"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ transferFrom 执行失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"transferFrom execution failed: {str(e)}")
