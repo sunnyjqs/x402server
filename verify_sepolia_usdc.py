@@ -12,10 +12,10 @@ import json
 # 加载环境变量
 load_dotenv()
 
-# Sepolia 测试网配置
+# 以太坊 Sepolia 测试网配置
 SEPOLIA_CONFIG = {
-    "rpc_url": "https://sepolia.base.org",
-    "usdc_address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    "rpc_url": "https://sepolia.infura.io/v3/9511773c563f4094b07478fb1706488b",
+    "usdc_address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 }
 
 # 最小化的 ERC20 ABI（只包含必要的函数）
@@ -214,7 +214,7 @@ async def verify_sepolia_usdc():
         # 建议新的配置
         print("\n📝 建议的配置更新:")
         print("SEPOLIA_USDC_CONFIG = {")
-        print(f'    "chain_id": 84532,')
+        print(f'    "chain_id": 11155111,')
         print(f'    "rpc_url": "{SEPOLIA_CONFIG["rpc_url"]}",')
         print(f'    "usdc_address": "{contract_address}",')
         print(f'    "usdc_abi": MINIMAL_ERC20_ABI + PERMIT_ABI')
@@ -227,9 +227,9 @@ async def test_alternative_usdc_addresses():
     """测试其他可能的 USDC 地址"""
     print("\n🔍 测试其他可能的 USDC 地址...")
     
-    # 常见的 Base Sepolia USDC 地址
+    # 常见的以太坊 Sepolia USDC 地址
     possible_addresses = [
-        "0x036CbD53842c5426634e7929541eC2318f3dCF7e",  # 当前使用的
+        "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",  # 当前使用的
         "0x4200000000000000000000000000000000000006",  # WETH
         "0x4200000000000000000000000000000000000007",  # 可能的 USDC
         "0x4200000000000000000000000000000000000008",  # 可能的 USDC

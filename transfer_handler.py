@@ -77,11 +77,11 @@ BASE_USDC_CONFIG = {
     ]
 }
 
-# Base Sepolia 测试网 USDC 配置
+# 以太坊 Sepolia 测试网 USDC 配置
 SEPOLIA_USDC_CONFIG = {
-    "chain_id": 84532,  # Base Sepolia testnet
-    "rpc_url": "https://sepolia.base.org",
-    "usdc_address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",  # Base Sepolia USDC
+    "chain_id": 11155111,  # 以太坊 Sepolia testnet
+    "rpc_url": "https://sepolia.infura.io/v3/9511773c563f4094b07478fb1706488b",  # 使用 Alchemy 的免费节点
+    "usdc_address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",  # 以太坊 Sepolia USDC
     "usdc_abi": [
         # 基本 ERC20 函数
         {
@@ -208,7 +208,7 @@ class TransferHandler:
         # 根据参数选择网络配置
         if use_sepolia:
             self.config = SEPOLIA_USDC_CONFIG
-            print(f"🔗 连接到 Base Sepolia 测试网: {self.config['rpc_url']}")
+            print(f"🔗 连接到以太坊 Sepolia 测试网: {self.config['rpc_url']}")
         else:
             self.config = BASE_USDC_CONFIG
             print(f"🔗 连接到 Base 主网: {self.config['rpc_url']}")
@@ -395,6 +395,15 @@ class TransferHandler:
             nonce = self.w3.eth.get_transaction_count(self.account.address)
             
             # 构建 permit 交易
+            print(f"🔍 构建 permit 交易...")
+            print(f"   USDC 合约地址: {self.config['usdc_address']}")
+            print(f"   USDC 合约实例: {self.usdc_contract}")
+            print(f"   Permit 函数: {self.usdc_contract.functions.permit}")
+            
+            # 检查合约是否有 permit 函数
+            if not hasattr(self.usdc_contract.functions, 'permit'):
+                raise ValueError("USDC 合约没有 permit 函数")
+            
             permit_txn = self.usdc_contract.functions.permit(
                 owner_checksum,
                 spender_checksum,
@@ -409,6 +418,12 @@ class TransferHandler:
                 'gasPrice': self.w3.eth.gas_price,
                 'nonce': nonce
             })
+            
+            print(f"✅ Permit 交易构建成功")
+            print(f"   To: {permit_txn['to']}")
+            print(f"   Data: {permit_txn['data'][:100]}...")
+            print(f"   Gas: {permit_txn['gas']}")
+            print(f"   Nonce: {permit_txn['nonce']}")
             
             # 签名并发送交易
             signed_txn = self.account.sign_transaction(permit_txn)

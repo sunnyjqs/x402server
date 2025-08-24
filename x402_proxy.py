@@ -239,7 +239,7 @@ async def execute_permit(permit_request: ExecutePermitRequest):
         handler = None
         
         # 根据网络信息创建对应的 handler
-        if permit_request.network == "sepolia":
+        if permit_request.network in ["sepolia", "baseSepolia", "ethSepolia"]:
             handler = create_sepolia_handler()
         else:
             handler = get_transfer_handler()
@@ -297,7 +297,7 @@ async def transfer_from(req: TransferFromRequest):
         print(f"Network: {req.network}")
 
         from transfer_handler import get_transfer_handler, create_sepolia_handler
-        if req.network == "sepolia":
+        if req.network in ["sepolia", "baseSepolia", "ethSepolia"]:
             handler = create_sepolia_handler()
         else:
             handler = get_transfer_handler()
